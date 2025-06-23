@@ -24,7 +24,25 @@ export async function GET(request: NextRequest) {
           totalPages: 0,
           hasNext: false,
           hasPrev: false
-        }
+        },
+        error: '数据格式错误'
+      });
+    }
+    
+    // 如果文章列表为空，可能是API限流或网络问题
+    if (allArticles.length === 0) {
+      console.warn('No articles returned from GitHub API, possible rate limiting');
+      return NextResponse.json({
+        articles: [],
+        pagination: {
+          page,
+          perPage,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false
+        },
+        error: '暂时无法获取文章数据，请稍后再试'
       });
     }
     
@@ -76,7 +94,8 @@ export async function GET(request: NextRequest) {
         totalPages: 0,
         hasNext: false,
         hasPrev: false
-      }
+      },
+      error: '获取文章数据失败，请稍后再试'
     }, { status: 200 });
   }
 } 

@@ -38,6 +38,26 @@ export class GitHubAPI {
   private static readonly REPO_NAME = 'iCSS';
   private static readonly BASE_URL = 'https://api.github.com';
   
+  // 获取 GitHub Token
+  private static getGitHubToken(): string | undefined {
+    return process.env.GITHUB_TOKEN;
+  }
+  
+  // 构建请求头
+  private static getHeaders(): HeadersInit {
+    const headers: HeadersInit = {
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'iCSS-Website'
+    };
+    
+    const token = this.getGitHubToken();
+    if (token) {
+      headers['Authorization'] = `token ${token}`;
+    }
+    
+    return headers;
+  }
+  
   // 从 issue 内容中提取图片
   private static extractImageFromBody(body: string): string | undefined {
     if (!body) return undefined;
@@ -105,15 +125,17 @@ export class GitHubAPI {
     try {
       const url = `${this.BASE_URL}/repos/${this.REPO_OWNER}/${this.REPO_NAME}/issues?state=open&sort=created&direction=desc&page=${page}&per_page=${perPage}`;
       
-      const response = await fetch(url, {
-        headers: {
-          'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': 'iCSS-Website'
-        }
+      const response = await this.fetchWithRetry(url, {
+        headers: this.getHeaders()
       });
       
       if (!response.ok) {
         console.error(`GitHub API error: ${response.status} - ${response.statusText}`);
+        // 如果是限流错误，返回空数组而不是抛出错误
+        if (response.status === 403) {
+          console.error('GitHub API rate limit exceeded');
+          return [];
+        }
         return [];
       }
       
@@ -151,8 +173,8 @@ export class GitHubAPI {
       console.log('Transformed articles count:', articles.length);
       console.log('Transformed articles:', articles.map(a => ({id: a.id, title: a.title})));
       
-      // 缓存结果（5分钟）
-      cache.set(cacheKey, articles, 5 * 60 * 1000);
+      // 缓存结果（30分钟）
+      cache.set(cacheKey, articles, 30 * 60 * 1000);
       
       return articles;
     } catch (error) {
@@ -193,15 +215,16 @@ export class GitHubAPI {
       const url = `${this.BASE_URL}/repos/${this.REPO_OWNER}/${this.REPO_NAME}/issues/${issueNumber}`;
       console.log('Fetching issue from:', url);
       
-      const response = await fetch(url, {
-        headers: {
-          'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': 'iCSS-Website'
-        }
+      const response = await this.fetchWithRetry(url, {
+        headers: this.getHeaders()
       });
       
       if (!response.ok) {
         console.error(`GitHub API error: ${response.status} - ${response.statusText}`);
+        if (response.status === 403) {
+          console.error('GitHub API rate limit exceeded');
+          throw new Error('GitHub API rate limit exceeded');
+        }
         throw new Error(`GitHub API error: ${response.status}`);
       }
       
@@ -226,8 +249,8 @@ export class GitHubAPI {
         category
       };
       
-      // 缓存结果（10分钟）
-      cache.set(cacheKey, result, 10 * 60 * 1000);
+      // 缓存结果（60分钟）
+      cache.set(cacheKey, result, 60 * 60 * 1000);
       
       return result;
     } catch (error) {
@@ -270,8 +293,8 @@ export class GitHubAPI {
         }
       }
       
-      // 缓存结果（15分钟）
-      cache.set(cacheKey, allArticles, 15 * 60 * 1000);
+      // 缓存结果（120分钟）
+      cache.set(cacheKey, allArticles, 120 * 60 * 1000);
       
       return allArticles;
     } catch (error) {
@@ -279,5 +302,28 @@ export class GitHubAPI {
       // 返回空数组而不是抛出错误
       return [];
     }
+  }
+  
+  // 带重试的 fetch 函数
+  private static async fetchWithRetry(url: string, options: RequestInit, retries: number = 3): Promise<Response> {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const response = await fetch(url, options);
+        if (response.ok || response.status === 403) {
+          return response;
+        }
+        // 如果不是 403 错误，等待后重试
+        if (i < retries - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // 递增延迟
+        }
+      } catch (error) {
+        console.error(`Fetch attempt ${i + 1} failed:`, error);
+        if (i === retries - 1) {
+          throw error;
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+      }
+    }
+    throw new Error(`Failed after ${retries} retries`);
   }
 } 

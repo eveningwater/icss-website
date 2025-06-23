@@ -52,6 +52,14 @@ export default function HomePage() {
       const data = await response.json();
       console.log('Articles API response:', data);
 
+      // 检查是否有错误信息
+      if (data.error) {
+        console.error('API returned error:', data.error);
+        setError(data.error);
+        setLoading(false);
+        return;
+      }
+
       // 确保数据格式正确
       const articles = Array.isArray(data.articles) ? data.articles : [];
       const pagination = data.pagination || { hasNext: false };
@@ -67,7 +75,7 @@ export default function HomePage() {
       setLoading(false);
     } catch (err) {
       console.error('Failed to fetch articles:', err);
-      setError('加载失败');
+      setError('网络连接失败，请检查网络后重试');
       setLoading(false);
     }
   };
