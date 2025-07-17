@@ -1,0 +1,15 @@
+{
+  "name": "icss-website-root",
+  "version": "1.0.0",
+  "description": "Root package.json for Vercel deployment",
+  "private": true,
+  "scripts": {
+    "dev": "cd website && pnpm dev",
+    "build": "cd website && pnpm build",
+    "start": "cd website && pnpm start",
+    "lint": "cd website && pnpm lint"
+  },
+  "dependencies": {
+    "next": "^14.0.0"
+  }
+} 
